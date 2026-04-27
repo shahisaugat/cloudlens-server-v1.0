@@ -1,0 +1,3 @@
+spring:
+  application:
+    name: cloudlens-server-v1.0
