@@ -1,0 +1,30 @@
+name: cloudlens-server-ci
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+
+      - name: Cache Maven Dependencies
+        uses: actions/cache@v5
+        with:
+          key: maven-${{ hashFiles('**/pom.xml') }}
+          path: '~/.m2'
+
+      - name: Build with Maven
+        run: ./mvnw clean package -DskipTests
