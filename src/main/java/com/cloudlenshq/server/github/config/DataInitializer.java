@@ -8,6 +8,8 @@ import com.cloudlenshq.server.github.entity.Runner;
 import com.cloudlenshq.server.github.repository.AuditLogRepository;
 import com.cloudlenshq.server.github.repository.IncidentRepository;
 import com.cloudlenshq.server.github.repository.RunnerRepository;
+import com.cloudlenshq.server.github.entity.*;
+import com.cloudlenshq.server.github.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Configuration;
@@ -32,10 +34,6 @@ public class DataInitializer implements CommandLineRunner {
             List<User> users = userRepository.findAll();
             if (!users.isEmpty()) {
                 User user = users.get(0);
-                
-                // ... (previous incident seeding)
-                
-                // Seed a sample rule for any existing custom integration
                 List<CustomIntegration> integrations = integrationRepository.findAllByUser(user);
                 if (!integrations.isEmpty() && ruleRepository.count() == 0) {
                     ruleRepository.save(CustomRule.builder()
