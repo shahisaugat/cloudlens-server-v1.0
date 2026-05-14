@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,20 @@ public class CustomIntegrationService {
     }
 
     @Transactional
+    public CustomIntegration createIntegration(User user, String name, String type, String category) {
+        CustomIntegration integration = CustomIntegration.builder()
+                .user(user)
+                .name(name)
+                .type(type)
+                .category(category)
+                .uniqueId(UUID.randomUUID().toString())
+                .createdAt(LocalDateTime.now())
+                .status("Active")
+                .build();
+        return integrationRepository.save(integration);
+    }
+
+    @Transactional
     public CustomIntegration createIntegration(CustomIntegration integration, User user) {
         integration.setUser(user);
         integration.setUniqueId(UUID.randomUUID().toString());
@@ -46,7 +61,7 @@ public class CustomIntegrationService {
     }
 
     @Transactional
-    public void handleIncomingWebhook(String uniqueId, String payload, String sourceIp) {
+    public void handleWebhook(String uniqueId, String payload, String sourceIp) {
         CustomIntegration integration = integrationRepository.findByUniqueId(uniqueId)
                 .orElseThrow(() -> new RuntimeException("Integration not found"));
 
@@ -109,23 +124,19 @@ public class CustomIntegrationService {
                     .build(), integration.getUser());
         } else if ("AUDIT_LOG".equalsIgnoreCase(rule.getActionType())) {
             auditLogRepository.save(AuditLog.builder()
-                    .action("CUSTOM_INTEGRATION_RULE_MATCH")
-                    .actor("CloudLens Engine")
-                    .details("Rule matched for integration: " + integration.getName())
-                    .timestamp(LocalDateTime.now())
-                    .user(integration.getUser())
+                    .action("RULE_MATCH")
+                    .target(integration.getName())
+                    .initials("AI")
+                    .color("bg-blue-500")
+                    .createdAt(LocalDateTime.now())
                     .build());
         }
     }
 
-    public List<WebhookPayload> getPayloads(String uniqueId, User user) {
-        CustomIntegration integration = integrationRepository.findByUniqueId(uniqueId)
+    public List<WebhookPayload> getRecentPayloads(Long id) {
+        CustomIntegration integration = integrationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Integration not found"));
         
-        if (!integration.getUser().getId().equals(user.getId())) {
-            throw new RuntimeException("Unauthorized");
-        }
-
-        return payloadRepository.findAllByIntegrationOrderByReceivedAtDesc(integration);
+        return payloadRepository.findAllByIntegrationOrderByReceivedAtDesc(integration, PageRequest.of(0, 10));
     }
 }
