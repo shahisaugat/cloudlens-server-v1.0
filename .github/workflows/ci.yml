@@ -40,8 +40,8 @@ jobs:
           CLOUDLENS_DB_URL: jdbc:postgresql://localhost:5432/cloudlens_test
           CLOUDLENS_DB_USERNAME: postgres
           CLOUDLENS_DB_PASSWORD: password
-          GITHUB_CLIENT_ID: dummy_id
-          GITHUB_CLIENT_SECRET: dummy_secret
+          CLIENT_ID_GITHUB: dummy_id
+          CLIENT_SECRET_GITHUB: dummy_secret
           SLACK_CLIENT_ID: dummy_id
           SLACK_CLIENT_SECRET: dummy_secret
           SLACK_SIGNING_SECRET: dummy_secret
