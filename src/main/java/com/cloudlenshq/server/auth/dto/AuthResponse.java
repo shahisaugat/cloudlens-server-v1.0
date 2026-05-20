@@ -12,6 +12,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @Builder
 public class AuthResponse {
+  private Long id;
   private String accessToken;
   private String refreshToken;
   private String tokenType;

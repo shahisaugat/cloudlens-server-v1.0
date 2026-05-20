@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudlens-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudlens-app
+  template:
+    metadata:
+      labels:
+        app: cloudlens-app
+    spec:
+      containers:
+        - name: cloudlens-app
+          image: docker.io/library/cloudlens:1.0-hackbuddies
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://db:5432/cloudlens
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: POSTGRES_PASSWORD
+            - name: CLIENT_ID_GITHUB
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: CLIENT_ID_GITHUB
+            - name: CLIENT_SECRET_GITHUB
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: CLIENT_SECRET_GITHUB
+            - name: SLACK_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: SLACK_CLIENT_ID
+            - name: SLACK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: SLACK_CLIENT_SECRET
+            - name: SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: SLACK_SIGNING_SECRET
+            - name: SLACK_REDIRECT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: SLACK_REDIRECT_URI
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: JWT_SECRET
+            - name: AGORA_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: AGORA_APP_ID
+            - name: AGORA_APP_CERTIFICATE
+              valueFrom:
+                secretKeyRef:
+                  name: cloudlens-secret
+                  key: AGORA_APP_CERTIFICATE
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudlens-app
+spec:
+  type: NodePort
+  selector:
+    app: cloudlens-app
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080

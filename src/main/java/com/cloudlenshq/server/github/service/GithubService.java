@@ -1,6 +1,7 @@
 package com.cloudlenshq.server.github.service;
 
 import com.cloudlenshq.server.auth.entity.User;
+import com.cloudlenshq.server.auth.entity.Team;
 import com.cloudlenshq.server.auth.repository.UserRepository;
 import com.cloudlenshq.server.github.entity.AuditLog;
 import com.cloudlenshq.server.github.entity.Deployment;
@@ -11,6 +12,7 @@ import com.cloudlenshq.server.github.repository.DeploymentRepository;
 import com.cloudlenshq.server.github.repository.IntegrationRepository;
 import com.cloudlenshq.server.github.repository.RunnerRepository;
 import com.cloudlenshq.server.github.repository.SlackWorkspaceRepository;
+import com.cloudlenshq.server.auth.repository.TeamRepository;
 import com.cloudlenshq.server.github.entity.SlackWorkspace;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -40,7 +44,10 @@ public class GithubService {
     private final IntegrationRepository integrationRepository;
     private final RunnerRepository runnerRepository;
     private final DeploymentRepository deploymentRepository;
+    private final TeamRepository teamRepository;
     private static final String GITHUB_API_URL = "https://api.github.com";
+
+    // Seeding logic removed to ensure clean start
 
     public List<Map<String, Object>> getUserRepositories() {
         String token = getGithubTokenForCurrentUser();
@@ -613,9 +620,11 @@ public class GithubService {
             .map(auditLog -> {
                 Map<String, Object> entry = new HashMap<>();
                 entry.put("initials", auditLog.getInitials());
+                entry.put("user", auditLog.getUserName());
                 entry.put("action", auditLog.getAction());
                 entry.put("target", auditLog.getTarget());
                 entry.put("ago", auditLog.getAgo());
+                entry.put("date", auditLog.getCreatedAt().format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, h:mm a")));
                 entry.put("color", auditLog.getColor());
                 entry.put("avatar", auditLog.getAvatarUrl());
                 return entry;
@@ -674,18 +683,33 @@ public class GithubService {
             List<Map<String, Object>> events = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(headers), List.class).getBody();
             if (events == null) return;
 
-            for (Map<String, Object> event : events.stream().limit(5).toList()) {
+            for (Map<String, Object> event : events.stream().limit(10).toList()) {
                 String type = (String) event.get("type");
                 String action = "Activity";
                 String target = fullRepoName;
+                
+                String createdAtStr = (String) event.get("created_at");
+                java.time.OffsetDateTime odt = java.time.OffsetDateTime.parse(createdAtStr);
+                java.time.LocalDateTime eventTime = odt.toLocalDateTime();
 
                 if ("PushEvent".equals(type)) {
                     action = "Pushed code";
                     target = "to master";
                 } else if ("PullRequestEvent".equals(type)) {
                     Map<String, Object> payload = (Map<String, Object>) event.get("payload");
-                    action = "PR " + payload.get("action");
-                    target = "#" + ((Map<String, Object>)payload.get("pull_request")).get("number");
+                    String prAction = (String) payload.get("action");
+                    Map<String, Object> pr = (Map<String, Object>) payload.get("pull_request");
+                    
+                    if ("closed".equals(prAction) && Boolean.TRUE.equals(pr.get("merged"))) {
+                        action = "PR merged";
+                        String mergedAt = (String) pr.get("merged_at");
+                        if (mergedAt != null) {
+                            eventTime = java.time.OffsetDateTime.parse(mergedAt).toLocalDateTime();
+                        }
+                    } else {
+                        action = "PR " + prAction;
+                    }
+                    target = "#" + pr.get("number");
                 }
 
                 Map<String, Object> actor = (Map<String, Object>) event.get("actor");
@@ -694,17 +718,22 @@ public class GithubService {
 
                 AuditLog auditLog = AuditLog.builder()
                     .initials(login.substring(0, Math.min(2, login.length())).toUpperCase())
+                    .userName(login)
                     .action(action)
                     .target(target)
-                    .ago("Just now")
+                    .createdAt(eventTime)
                     .color("#0061AA")
                     .avatarUrl(avatar)
                     .build();
                 
-                // Only save if not already there (simple deduplication for demo)
+                // Deduplication based on action, target and exact time
                 final String finalAction = action;
                 final String finalTarget = target;
-                if (auditLogRepository.findAll().stream().noneMatch(l -> l.getAction().equals(finalAction) && l.getTarget().equals(finalTarget))) {
+                final java.time.LocalDateTime finalTime = eventTime;
+                if (auditLogRepository.findAll().stream().noneMatch(l -> 
+                    l.getAction().equals(finalAction) && 
+                    l.getTarget().equals(finalTarget) && 
+                    (l.getCreatedAt() != null && l.getCreatedAt().equals(finalTime)))) {
                     auditLogRepository.save(auditLog);
                 }
             }
@@ -722,9 +751,10 @@ public class GithubService {
         AuditLog auditLog = AuditLog.builder()
             .action(action)
             .target(target)
+            .userName(user.getFullName())
             .initials(initials)
             .color("#0061AA")
-            .ago("Just now")
+            .createdAt(java.time.LocalDateTime.now())
             .avatarUrl(user.getAvatarUrl())
             .build();
         
@@ -860,5 +890,164 @@ public class GithubService {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public List<Map<String, Object>> getTeam() {
+        return userRepository.findAll().stream().map(user -> {
+            Map<String, Object> member = new HashMap<>();
+            member.put("id", user.getId().toString());
+            member.put("name", user.getFullName());
+            member.put("email", user.getEmail());
+            member.put("role", capitalize(user.getRole().name()));
+            member.put("status", "Active"); // Defaulting to Active
+            
+            // Derive last active from updatedAt
+            if (user.getUpdatedAt() != null) {
+                member.put("lastActive", timeAgo(user.getUpdatedAt()));
+            } else {
+                member.put("lastActive", "Recently");
+            }
+            
+            // Map real teams
+            List<String> userTeams = user.getTeams().stream()
+                    .map(Team::getName)
+                    .toList();
+            member.put("teams", userTeams.isEmpty() ? List.of("Unassigned") : userTeams);
+            
+            member.put("avatar", getInitials(user.getFullName()));
+            member.put("avatarUrl", user.getAvatarUrl());
+            
+            // Format joined date
+            if (user.getCreatedAt() != null) {
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("MMM yyyy");
+                member.put("joinedDate", user.getCreatedAt().format(formatter));
+            } else {
+                member.put("joinedDate", "Recently");
+            }
+            
+            // Assign a color based on name
+            String[] colors = {"bg-blue-50 text-blue-600 border-blue-100", 
+                             "bg-emerald-50 text-emerald-600 border-emerald-100", 
+                             "bg-purple-50 text-purple-600 border-purple-100", 
+                             "bg-amber-50 text-amber-600 border-amber-100"};
+            int colorIdx = Math.abs(user.getFullName().hashCode() % colors.length);
+            member.put("avatarBg", colors[colorIdx]);
+            
+            return member;
+        }).toList();
+    }
+
+    private String getInitials(String name) {
+        if (name == null || name.isEmpty()) return "U";
+        String[] parts = name.split(" ");
+        if (parts.length >= 2) {
+            return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+        }
+        return name.substring(0, Math.min(2, name.length())).toUpperCase();
+    }
+
+    private String capitalize(String str) {
+        if (str == null || str.isEmpty()) return str;
+        return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
+    }
+
+    private String timeAgo(java.time.LocalDateTime dateTime) {
+        java.time.Duration duration = java.time.Duration.between(dateTime, java.time.LocalDateTime.now());
+        long seconds = duration.getSeconds();
+        if (seconds < 60) return "Just now";
+        long minutes = seconds / 60;
+        if (minutes < 60) return minutes + "m ago";
+        long hours = minutes / 60;
+        if (hours < 24) return hours + "h ago";
+        long days = hours / 24;
+        return days + "d ago";
+    }
+
+    public List<Map<String, Object>> getAllTeams() {
+        return teamRepository.findAll().stream()
+                .map(this::mapTeam)
+                .toList();
+    }
+
+    public Map<String, Object> createTeam(Map<String, String> data) {
+        User creator = getCurrentUser();
+        Team team = Team.builder()
+                .name(data.get("name"))
+                .description(data.get("description"))
+                .avatarUrl(data.get("avatarUrl"))
+                .coverImageUrl(data.get("coverImageUrl"))
+                .createdBy(creator)
+                .build();
+        Team saved = teamRepository.save(team);
+        log.info("Created new team: {} by user: {}", saved.getName(), creator.getEmail());
+        return mapTeam(saved);
+    }
+
+    public void deleteTeam(Long id) {
+        Team team = teamRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Team not found"));
+        
+        User currentUser = getCurrentUser();
+        
+        // Only creator can delete
+        if (team.getCreatedBy() != null && !team.getCreatedBy().getId().equals(currentUser.getId())) {
+            throw new RuntimeException("Only the team creator can delete this team");
+        }
+        
+        // Remove team association from users first to avoid constraint violations if necessary
+        // In this case, team is the inverse side (mappedBy), so JPA should handle it
+        teamRepository.delete(team);
+        log.info("Deleted team: {} by user: {}", id, currentUser.getEmail());
+    }
+
+    public Map<String, Object> getTeamDetails(Long id) {
+        Team team = teamRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Team not found"));
+        
+        Map<String, Object> details = mapTeam(team);
+        
+        // Add detailed member info
+        List<Map<String, Object>> members = team.getMembers().stream()
+                .map(user -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("id", user.getId().toString());
+                    m.put("name", user.getFullName());
+                    m.put("email", user.getEmail());
+                    m.put("avatarUrl", user.getAvatarUrl());
+                    m.put("role", capitalize(user.getRole().name()));
+                    return m;
+                }).toList();
+        
+        details.put("members", members);
+        return details;
+    }
+
+    public void updateUserTeams(Long userId, List<Long> teamIds) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        List<Team> teams = teamRepository.findAllById(teamIds);
+        user.getTeams().clear();
+        user.getTeams().addAll(teams);
+        userRepository.save(user);
+        log.info("Updated teams for user {}: {}", userId, teamIds);
+    }
+
+    private Map<String, Object> mapTeam(Team team) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", team.getId());
+        map.put("name", team.getName());
+        map.put("description", team.getDescription());
+        map.put("avatarUrl", team.getAvatarUrl());
+        map.put("coverImageUrl", team.getCoverImageUrl());
+        map.put("memberCount", team.getMembers().size());
+        map.put("createdAt", team.getCreatedAt());
+        
+        if (team.getCreatedBy() != null) {
+            map.put("createdById", team.getCreatedBy().getId().toString());
+            map.put("creatorName", team.getCreatedBy().getFullName());
+        }
+        
+        return map;
     }
 }

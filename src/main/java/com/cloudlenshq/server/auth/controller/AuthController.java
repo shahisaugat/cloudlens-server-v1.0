@@ -60,4 +60,34 @@ public class AuthController {
             .build();
     return ResponseEntity.ok(profile);
   }
+
+  @GetMapping("/users")
+  public ResponseEntity<java.util.List<UserProfileResponse>> getAllUsers() {
+    java.util.List<UserProfileResponse> profiles = userRepository.findAll().stream()
+        .map(u -> UserProfileResponse.builder()
+            .id(u.getId())
+            .email(u.getEmail())
+            .fullName(u.getFullName())
+            .avatarUrl(u.getAvatarUrl())
+            .role(u.getRole().name())
+            .createdAt(u.getCreatedAt())
+            .build())
+        .collect(java.util.stream.Collectors.toList());
+    return ResponseEntity.ok(profiles);
+  }
+
+  @GetMapping("/users/{id}")
+  public ResponseEntity<UserProfileResponse> getUserById(@org.springframework.web.bind.annotation.PathVariable Long id) {
+    return userRepository.findById(id)
+        .map(u -> UserProfileResponse.builder()
+            .id(u.getId())
+            .email(u.getEmail())
+            .fullName(u.getFullName())
+            .avatarUrl(u.getAvatarUrl())
+            .role(u.getRole().name())
+            .createdAt(u.getCreatedAt())
+            .build())
+        .map(ResponseEntity::ok)
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
 }
