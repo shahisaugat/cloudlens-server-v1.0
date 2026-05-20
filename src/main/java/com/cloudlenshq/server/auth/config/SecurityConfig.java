@@ -35,7 +35,8 @@ public class SecurityConfig {
   private final JwtAuthenticationFilter jwtAuthFilter;
   private final UserDetailsService userDetailsService;
   private final com.cloudlenshq.server.auth.service.CustomOAuth2UserService customOAuth2UserService;
-  private final com.cloudlenshq.server.auth.handler.OAuth2AuthenticationSuccessHandler oauth2SuccessHandler;
+  private final com.cloudlenshq.server.auth.handler.OAuth2AuthenticationSuccessHandler
+      oauth2SuccessHandler;
 
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -43,9 +44,16 @@ public class SecurityConfig {
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/oauth2/**", "/api/v1/slack/**", "/api/v1/github/webhooks", "/api/v1/hooks/**")
+                auth.requestMatchers(
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/register",
+                        "/oauth2/**",
+                        "/api/v1/slack/**",
+                        "/api/v1/github/webhooks",
+                        "/api/v1/hooks/**",
+                        "/api/v1/agora/**")
                     .permitAll()
-                    .requestMatchers("/actuator/health")
+                    .requestMatchers("/actuator/health", "/actuator/prometheus", "/actuator/info")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
@@ -55,9 +63,11 @@ public class SecurityConfig {
             ex ->
                 ex.authenticationEntryPoint(authenticationEntryPoint())
                     .accessDeniedHandler(accessDeniedHandler()))
-        .oauth2Login(oauth2 -> oauth2
-            .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
-            .successHandler(oauth2SuccessHandler))
+        .oauth2Login(
+            oauth2 ->
+                oauth2
+                    .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
+                    .successHandler(oauth2SuccessHandler))
         .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
     return http.build();
@@ -106,12 +116,12 @@ public class SecurityConfig {
           .getWriter()
           .write(
               """
-                {
-                    "status": 401,
-                    "error": "Unauthorized",
-                    "message": "Authentication required to access this resource"
-                }
-            """);
+                  {
+                      "status": 401,
+                      "error": "Unauthorized",
+                      "message": "Authentication required to access this resource"
+                  }
+              """);
     };
   }
 
@@ -124,12 +134,12 @@ public class SecurityConfig {
           .getWriter()
           .write(
               """
-                {
-                    "status": 403,
-                    "error": "Forbidden",
-                    "message": "You do not have permission to access this resource"
-                }
-            """);
+                  {
+                      "status": 403,
+                      "error": "Forbidden",
+                      "message": "You do not have permission to access this resource"
+                  }
+              """);
     };
   }
 

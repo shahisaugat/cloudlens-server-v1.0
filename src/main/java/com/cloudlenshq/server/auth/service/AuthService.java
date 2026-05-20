@@ -98,6 +98,7 @@ public class AuthService {
 
   private AuthResponse buildAuthResponse(User user, String accessToken, String refreshToken) {
     return AuthResponse.builder()
+        .id(user.getId())
         .accessToken(accessToken)
         .refreshToken(refreshToken)
         .tokenType("Bearer")

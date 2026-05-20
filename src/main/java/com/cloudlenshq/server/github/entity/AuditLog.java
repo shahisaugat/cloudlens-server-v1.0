@@ -23,8 +23,8 @@ public class AuditLog {
     private String target;
     private String ago; // For demo, we can store string or calculate
     private String color;
+    private String userName;
     private String avatarUrl;
 
-    @CreationTimestamp
     private LocalDateTime createdAt;
 }

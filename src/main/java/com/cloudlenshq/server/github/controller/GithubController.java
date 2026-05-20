@@ -124,4 +124,38 @@ public class GithubController {
         githubService.triggerWorkflow(owner, repo, workflowId, ref);
         return ResponseEntity.ok().build();
     }
+    @GetMapping("/team")
+    public ResponseEntity<List<Map<String, Object>>> getTeam() {
+        return ResponseEntity.ok(githubService.getTeam());
+    }
+    @GetMapping("/teams")
+    public ResponseEntity<List<Map<String, Object>>> getAllTeams() {
+        return ResponseEntity.ok(githubService.getAllTeams());
+    }
+
+    @PostMapping("/teams")
+    public ResponseEntity<Map<String, Object>> createTeam(@RequestBody Map<String, String> data) {
+        return ResponseEntity.ok(githubService.createTeam(data));
+    }
+
+    @GetMapping("/teams/{id}")
+    public ResponseEntity<Map<String, Object>> getTeamDetails(@PathVariable Long id) {
+        return ResponseEntity.ok(githubService.getTeamDetails(id));
+    }
+
+    @DeleteMapping("/teams/{id}")
+    public ResponseEntity<Void> deleteTeam(@PathVariable Long id) {
+        githubService.deleteTeam(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/team/assign")
+    public ResponseEntity<Void> assignTeams(@RequestBody Map<String, Object> body) {
+        Long userId = Long.valueOf(body.get("userId").toString());
+        List<Long> teamIds = ((List<?>) body.get("teamIds")).stream()
+                .map(id -> Long.valueOf(id.toString()))
+                .toList();
+        githubService.updateUserTeams(userId, teamIds);
+        return ResponseEntity.ok().build();
+    }
 }
