@@ -175,6 +175,7 @@ Grafana dashboard panels:
 - **JVM Memory** — heap and non-heap usage over time
 - **HTTP Request Rate** — requests per minute
 - **CPU Usage** — process CPU utilization
+- **ALERT Rules** - Alerts when the CPU usage cross 80%
 
 ---
 
@@ -204,7 +205,3 @@ All other endpoints require JWT authentication.
 | `AZURE_SSH_KEY`   | Private SSH key for Azure VM |
 
 ---
-
-## Author
-
-**Saugat Shahi** — DevOps Internship 2026
