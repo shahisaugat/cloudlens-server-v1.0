@@ -1,5 +1,4 @@
 # CloudLens Server — DevOps Internship Project
-
 A production-grade Spring Boot application deployed with a full DevOps pipeline, built as part of a 2-month DevOps internship program.
 
 ## Tech Stack
